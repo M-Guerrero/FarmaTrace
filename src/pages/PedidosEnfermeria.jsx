@@ -80,9 +80,10 @@ function PedidosEnfermeria() {
         return;
       }
 
-      // Filtrar los seguimientos de Farmacia para determinar si la entrega ha sido confirmada
       const entregadosPorEnfermeria = new Set(
-        seguimientos.filter(s => s.estado === 'Entregado' && s.user_id && s.user_id == userId).map(s => s.pedido_id)
+        seguimientos
+          .filter(s => s.estado === 'Entregado' && s.user_id === userId)
+          .map(s => s.pedido_id)
       );
 
       const ultimaFechaPorPedido = {};
@@ -92,14 +93,10 @@ function PedidosEnfermeria() {
         }
       });
 
-      // Añadimos la fecha de seguimiento a los pedidos
-      const pedidosConFecha = pedidosFiltrados.map(p => {
-        const fechaUltimoCambio = ultimaFechaPorPedido[p.pedido_id] || null;
-        return {
-          ...p,
-          fechaUltimoCambio: fechaUltimoCambio,
-        };
-      });
+      const pedidosConFecha = pedidosFiltrados.map(p => ({
+        ...p,
+        fechaUltimoCambio: ultimaFechaPorPedido[p.pedido_id] || null,
+      }));
 
       const paraAdministrar = [];
       const anteriores = [];
@@ -116,8 +113,6 @@ function PedidosEnfermeria() {
           }
         } else if (estado === 'Administrado') {
           anteriores.push(p);
-        } else if (estado === 'Entregado' && !entregadosPorEnfermeria.has(pedido_id)) {
-          paraConfirmarEntrega.push(p);
         }
       });
 
@@ -130,12 +125,16 @@ function PedidosEnfermeria() {
   }, [controlSeleccionado, userId]);
 
   const avanzarEstado = async (pedidoId, nuevoEstado) => {
-    const { error: insertError } = await supabase.from('seguimiento_pedido').insert([{
-      pedido_id: pedidoId,
-      user_id: userId,
-      estado: nuevoEstado,
-      fecha: new Date().toISOString(),
-    }]);
+    const fechaActual = new Date().toISOString();
+
+    const { error: insertError } = await supabase.from('seguimiento_pedido').insert([
+      {
+        pedido_id: pedidoId,
+        user_id: userId,
+        estado: nuevoEstado,
+        fecha: fechaActual,
+      }
+    ]);
 
     if (insertError) {
       console.error('Error al insertar seguimiento:', insertError);
@@ -149,10 +148,26 @@ function PedidosEnfermeria() {
 
     if (updateError) {
       console.error('Error al actualizar estado del pedido:', updateError);
+      return;
     }
 
-    setPedidosParaEntregar(prevState => prevState.filter(p => p.pedido_id !== pedidoId));
-    setPedidosParaAdministrar(prevState => [...prevState, ...pedidosParaEntregar.filter(p => p.pedido_id === pedidoId)]);
+    if (nuevoEstado === 'Entregado') {
+      const pedidoActualizado = pedidosParaEntregar.find(p => p.pedido_id === pedidoId);
+      if (pedidoActualizado) {
+        pedidoActualizado.estado = 'Entregado';
+        pedidoActualizado.fechaUltimoCambio = fechaActual;
+        setPedidosParaEntregar(prev => prev.filter(p => p.pedido_id !== pedidoId));
+        setPedidosParaAdministrar(prev => [...prev, pedidoActualizado]);
+      }
+    } else if (nuevoEstado === 'Administrado') {
+      const pedidoActualizado = pedidosParaAdministrar.find(p => p.pedido_id === pedidoId);
+      if (pedidoActualizado) {
+        pedidoActualizado.estado = 'Administrado';
+        pedidoActualizado.fechaUltimoCambio = fechaActual;
+        setPedidosParaAdministrar(prev => prev.filter(p => p.pedido_id !== pedidoId));
+        setPedidosAnteriores(prev => [...prev, pedidoActualizado]);
+      }
+    }
   };
 
   return (
