@@ -47,77 +47,77 @@ function PedidosFarmacia() {
     verificarRolUsuario();
   }, [navigate]);
 
+  // EXTRAÍDO: para que lo podamos usar también después
+  const fetchPedidos = async () => {
+    const { data: pedidoData, error: errorPedido } = await supabase
+      .from('pedido')
+      .select('pedido_id, estado, habitacion, medicamento');
+
+    if (errorPedido) {
+      console.error('Error en pedido:', errorPedido);
+      return;
+    }
+
+    const idsPedidos = pedidoData.map(p => p.pedido_id);
+
+    const { data: seguimientos, error: errorSeguimiento } = await supabase
+      .from('seguimiento_pedido')
+      .select('pedido_id, estado, fecha, user_id')
+      .in('pedido_id', idsPedidos)
+      .order('fecha', { ascending: false });
+
+    if (errorSeguimiento) {
+      console.error('Error en seguimientos:', errorSeguimiento);
+      return;
+    }
+
+    const { data: farmaciaUsuarios, error: errorUsuarios } = await supabase
+      .from('usuario')
+      .select('user_id')
+      .eq('rol', 'farmacia');
+
+    if (errorUsuarios) {
+      console.error('Error al obtener los usuarios de farmacia:', errorUsuarios);
+      return;
+    }
+
+    const idsFarmacia = new Set(farmaciaUsuarios.map(u => u.user_id));
+
+    const enProceso = [];
+    const listos = [];
+    const esperandoConfirmacion = [];
+    const anteriores = [];
+
+    pedidoData.forEach(p => {
+      const { pedido_id, estado } = p;
+      const seguimientoPedido = seguimientos.filter(s => s.pedido_id === pedido_id);
+      const confirmadoPorFarmacia = seguimientoPedido.some(
+        s => s.estado === 'Recogido' && idsFarmacia.has(s.user_id)
+      );
+      const fechaUltimoCambio = seguimientoPedido.length > 0 ? seguimientoPedido[0].fecha : null;
+      const pedidoConFecha = { ...p, fechaUltimoCambio };
+
+      if (estado === 'En proceso') {
+        enProceso.push(pedidoConFecha);
+      } else if (estado === 'Listo para recoger') {
+        listos.push(pedidoConFecha);
+      } else {
+        if (confirmadoPorFarmacia) {
+          anteriores.push(pedidoConFecha);
+        } else {
+          esperandoConfirmacion.push(pedidoConFecha);
+        }
+      }
+    });
+
+    setPedidosEnProceso(enProceso);
+    setPedidosListos(listos);
+    setPedidosEsperandoConfirmacion(esperandoConfirmacion);
+    setPedidosAnteriores(anteriores);
+  };
+
   useEffect(() => {
     if (!userId || userRole !== 'farmacia') return;
-
-    const fetchPedidos = async () => {
-      const { data: pedidoData, error: errorPedido } = await supabase
-        .from('pedido')
-        .select('pedido_id, estado, habitacion, medicamento');
-
-      if (errorPedido) {
-        console.error('Error en pedido:', errorPedido);
-        return;
-      }
-
-      const idsPedidos = pedidoData.map(p => p.pedido_id);
-
-      const { data: seguimientos, error: errorSeguimiento } = await supabase
-        .from('seguimiento_pedido')
-        .select('pedido_id, estado, fecha, user_id')
-        .in('pedido_id', idsPedidos)
-        .order('fecha', { ascending: false });
-
-      if (errorSeguimiento) {
-        console.error('Error en seguimientos:', errorSeguimiento);
-        return;
-      }
-
-      const { data: farmaciaUsuarios, error: errorUsuarios } = await supabase
-        .from('usuario')
-        .select('user_id')
-        .eq('rol', 'farmacia');
-
-      if (errorUsuarios) {
-        console.error('Error al obtener los usuarios de farmacia:', errorUsuarios);
-        return;
-      }
-
-      const idsFarmacia = new Set(farmaciaUsuarios.map(u => u.user_id));
-
-      const enProceso = [];
-      const listos = [];
-      const esperandoConfirmacion = [];
-      const anteriores = [];
-
-      pedidoData.forEach(p => {
-        const { pedido_id, estado } = p;
-        const seguimientoPedido = seguimientos.filter(s => s.pedido_id === pedido_id);
-        const confirmadoPorFarmacia = seguimientoPedido.some(
-          s => s.estado === 'Recogido' && idsFarmacia.has(s.user_id)
-        );
-        const fechaUltimoCambio = seguimientoPedido.length > 0 ? seguimientoPedido[0].fecha : null;
-        const pedidoConFecha = { ...p, fechaUltimoCambio };
-
-        if (estado === 'En proceso') {
-          enProceso.push(pedidoConFecha);
-        } else if (estado === 'Listo para recoger') {
-          listos.push(pedidoConFecha);
-        } else {
-          if (confirmadoPorFarmacia) {
-            anteriores.push(pedidoConFecha);
-          } else {
-            esperandoConfirmacion.push(pedidoConFecha);
-          }
-        }
-      });
-
-      setPedidosEnProceso(enProceso);
-      setPedidosListos(listos);
-      setPedidosEsperandoConfirmacion(esperandoConfirmacion);
-      setPedidosAnteriores(anteriores);
-    };
-
     fetchPedidos();
   }, [userId, userRole]);
 
@@ -155,7 +155,8 @@ function PedidosFarmacia() {
       }
     }
 
-    window.location.reload();
+    // Actualiza los pedidos sin recargar
+    await fetchPedidos();
   };
 
   if (userRole === null) {
