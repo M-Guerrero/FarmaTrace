@@ -1,0 +1,4 @@
+El diseño de herramientas automáticas facilita el flujo de trabajo intrahospitalario, reduciendo tiempos y errores en el manejo de la información clínica. Las herramientas de control y seguimiento de fármacos garantizan una entrega adecuada, reduciendo pérdidas y favoreciendo la trazabilidad.
+Este artículo presenta el desarrollo de una aplicación web, FarmaTrace, para el seguimiento de fármacos, controlando las comunicaciones entre Farmacia, celadores y servicios, automatizando la recogida de fármacos mediante notificaciones.
+Todo el proceso queda registrado con validación digital por ambos servicios, permitiendo conocer la ubicación, hora y responsable del traslado.
+El objetivo es mejorar la dinámica intrahospitalaria, orientándola hacia la eficiencia, seguridad y responsabilidad en los traslados entre servicios clínicos.
