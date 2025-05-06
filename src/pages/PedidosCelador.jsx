@@ -12,28 +12,22 @@ function PedidosCelador() {
   const [userRole, setUserRole] = useState(null);
   const navigate = useNavigate();
 
+  // 1) Verificar rol al montar
   useEffect(() => {
     const verificarRol = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-
       if (!user) {
         navigate('/');
         return;
       }
-
       const { data, error } = await supabase
         .from('usuario')
         .select('rol')
         .eq('user_id', user.id)
         .single();
 
-      if (error || !data) {
-        console.error('Error al obtener el rol:', error?.message);
-        navigate('/sin-acceso');
-        return;
-      }
-
-      if (data.rol !== 'celador') {
+      if (error || !data || data.rol !== 'celador') {
+        console.error('Acceso no autorizado', error);
         navigate('/sin-acceso');
         return;
       }
@@ -45,100 +39,90 @@ function PedidosCelador() {
     verificarRol();
   }, [navigate]);
 
+  // 2) Función extraída para recargar siempre toda la lista
+  const fetchPedidos = async () => {
+    const { data: pedidos, error: errorPedidos } = await supabase
+      .from('pedido')
+      .select('pedido_id, estado, habitacion, medicamento');
+
+    if (errorPedidos) {
+      console.error('Error al obtener pedidos:', errorPedidos);
+      return;
+    }
+
+    const { data: seguimientos, error: errorSeguimientos } = await supabase
+      .from('seguimiento_pedido')
+      .select('pedido_id, estado, user_id, fecha')
+      .order('fecha', { ascending: false });
+
+    if (errorSeguimientos) {
+      console.error('Error al obtener seguimientos:', errorSeguimientos);
+      return;
+    }
+
+    // Unir cada pedido con su última fecha de cambio
+    const pedidosConFecha = pedidos.map(pedido => {
+      const ultimo = seguimientos.find(s => s.pedido_id === pedido.pedido_id);
+      return { ...pedido, fechaUltimoCambio: ultimo ? ultimo.fecha : null };
+    });
+
+    // Filtrar categorías
+    setPedidosParaRecoger(
+      pedidosConFecha.filter(p => p.estado === 'Listo para recoger')
+    );
+
+    setPedidosParaEntregar(
+      pedidosConFecha.filter(p => 
+        p.estado === 'Recogido' &&
+        seguimientos.some(s => 
+          s.pedido_id === p.pedido_id && s.estado === 'Recogido' && s.user_id === userId
+        )
+      )
+    );
+
+    setPedidosSinConfirmarEntrega(
+      pedidosConFecha.filter(p =>
+        p.estado === 'Entregado' &&
+        seguimientos.some(s => 
+          s.pedido_id === p.pedido_id && s.estado === 'Entregado' && s.user_id === userId
+        ) &&
+        !seguimientos.some(s =>
+          s.pedido_id === p.pedido_id && s.estado === 'Entregado' && s.user_id !== userId
+        )
+      )
+    );
+
+    setPedidosAnteriores(
+      pedidosConFecha.filter(p =>
+        (p.estado === 'Entregado' || p.estado === 'Administrado') &&
+        seguimientos.some(s =>
+          s.pedido_id === p.pedido_id &&
+          (s.estado === 'Entregado' || s.estado === 'Administrado') &&
+          s.user_id === userId
+        ) &&
+        seguimientos.some(s =>
+          s.pedido_id === p.pedido_id && s.estado !== 'Recogido' && s.user_id !== userId
+        )
+      )
+    );
+  };
+
+  // 3) Al cambiar userId / rol, recargar lista
   useEffect(() => {
     if (!userId || userRole !== 'celador') return;
-
-    const fetchPedidos = async () => {
-      const { data: pedidos, error: errorPedidos } = await supabase
-        .from('pedido')
-        .select('pedido_id, estado, habitacion, medicamento');
-
-      if (errorPedidos) {
-        console.error('Error al obtener pedidos:', errorPedidos);
-        return;
-      }
-
-      const { data: seguimientos, error: errorSeguimientos } = await supabase
-        .from('seguimiento_pedido')
-        .select('pedido_id, estado, user_id, fecha')
-        .order('fecha', { ascending: false });
-
-      if (errorSeguimientos) {
-        console.error('Error al obtener seguimientos:', errorSeguimientos);
-        return;
-      }
-
-      // Unir los pedidos con la fecha del último seguimiento
-      const pedidosConFecha = pedidos.map(pedido => {
-        const ultimoSeguimiento = seguimientos.find(seguimiento => seguimiento.pedido_id === pedido.pedido_id);
-        return {
-          ...pedido,
-          fechaUltimoCambio: ultimoSeguimiento ? ultimoSeguimiento.fecha : null,
-        };
-      });
-
-      // Filtrar "Pedidos para recoger" (estado 'Listo para recoger')
-      const pedidosParaRecoger = pedidosConFecha.filter(p => p.estado === 'Listo para recoger');
-
-      // Filtrar "Pedidos para entregar" solo para el celador que ha hecho la recogida
-      const pedidosParaEntregar = pedidosConFecha.filter(p => {
-        if (p.estado !== 'Recogido') return false;
-
-        // Verificar si el celador actual es el que hizo la recogida
-        const recogidoPorEsteCelador = seguimientos.some(s =>
-          s.pedido_id === p.pedido_id && s.estado === 'Recogido' && s.user_id === userId
-        );
-
-        return recogidoPorEsteCelador;
-      });
-
-      // Filtrar "Pedidos sin confirmar entrega" (estado 'Entregado', pero no confirmado por otro)
-      const pedidosSinConfirmarEntrega = pedidosConFecha.filter(p => {
-        if (p.estado !== 'Entregado') return false;
-
-        const entregaCelador = seguimientos.find(s =>
-          s.pedido_id === p.pedido_id && s.estado === 'Entregado' && s.user_id === userId
-        );
-
-        const confirmacionEnfermeria = seguimientos.some(s =>
-          s.pedido_id === p.pedido_id && s.estado === 'Entregado' && s.user_id !== userId
-        );
-
-        return entregaCelador && !confirmacionEnfermeria;
-      });
-
-      // Filtrar "Pedidos anteriores" (estado 'Entregado' o 'Administrado', confirmado por enfermería)
-      const pedidosAnteriores = pedidosConFecha.filter(p => {
-        if (p.estado !== 'Entregado' && p.estado !== 'Administrado') return false;
-
-        const entregaCelador = seguimientos.find(s =>
-          s.pedido_id === p.pedido_id && (s.estado === 'Entregado' || s.estado === 'Administrado') && s.user_id === userId
-        );
-
-        const confirmacionEnfermeria = seguimientos.some(s =>
-          s.pedido_id === p.pedido_id && (s.estado === 'Confirmado' || s.estado === 'Entregado') && s.user_id !== userId
-        );
-
-        return entregaCelador && confirmacionEnfermeria;
-      });
-
-      // Establecer los estados de los pedidos
-      setPedidosParaRecoger(pedidosParaRecoger);
-      setPedidosParaEntregar(pedidosParaEntregar); // Solo los pedidos que el celador ha recogido
-      setPedidosSinConfirmarEntrega(pedidosSinConfirmarEntrega);
-      setPedidosAnteriores(pedidosAnteriores);
-    };
-
     fetchPedidos();
   }, [userId, userRole]);
 
+  // 4) Al avanzar estado, actualizar DB y recargar lista
   const avanzarEstado = async (pedidoId, nuevoEstado, actualizarPedido = true) => {
-    const { error: insertError } = await supabase.from('seguimiento_pedido').insert([{
-      pedido_id: pedidoId,
-      user_id: userId,
-      estado: nuevoEstado,
-      fecha: new Date().toISOString(),
-    }]);
+    const { error: insertError } = await supabase
+      .from('seguimiento_pedido')
+      .insert([{
+        pedido_id: pedidoId,
+        user_id: userId,
+        estado: nuevoEstado,
+        fecha: new Date().toISOString(),
+      }]);
 
     if (insertError) {
       console.error('Error al insertar seguimiento:', insertError);
@@ -152,26 +136,17 @@ function PedidosCelador() {
         .eq('pedido_id', pedidoId);
 
       if (updateError) {
-        console.error('Error al actualizar estado del pedido:', updateError);
+        console.error('Error al actualizar pedido:', updateError);
       }
     }
 
-    // Actualizar el estado local sin necesidad de recargar la página
-    setPedidosParaRecoger(prevState =>
-      prevState.filter(p => p.pedido_id !== pedidoId)
-    );
-    setPedidosParaEntregar(prevState =>
-      prevState.filter(p => p.pedido_id !== pedidoId)
-    );
-    setPedidosSinConfirmarEntrega(prevState =>
-      prevState.filter(p => p.pedido_id !== pedidoId)
-    );
-    setPedidosAnteriores(prevState =>
-      prevState.filter(p => p.pedido_id !== pedidoId)
-    );
+    // recarga completa para reflejar el cambio
+    await fetchPedidos();
   };
 
-  if (userRole === null) return <div>Cargando...</div>;
+  if (userRole === null) {
+    return <div>Cargando...</div>;
+  }
 
   return (
     <div style={{ padding: '2rem', backgroundColor: '#f5f5f5' }}>

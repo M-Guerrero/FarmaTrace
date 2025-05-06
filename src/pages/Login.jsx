@@ -84,7 +84,7 @@ function Login() {
             fontFamily: 'Arial, sans-serif',
             marginBottom: '0.5rem',
           }}>
-            {<img src="./PharmaTrace.png" alt="Logo" style={{ maxWidth: '200px' }} />}
+            {/*<img src="./PharmaTraceLogo.jpg" alt="Logo" style={{ maxWidth: '200px' }} />*/}
           </h1>
         </div>
   
