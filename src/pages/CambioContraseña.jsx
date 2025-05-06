@@ -143,4 +143,4 @@ function CambioContraseña() {
   );
 }
 
-export default CambioContraseña()
+export default CambioContraseña;
