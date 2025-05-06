@@ -79,8 +79,8 @@ function PedidosEnfermeria() {
       }
   
       // Filtrar los seguimientos de Farmacia para determinar si la entrega ha sido confirmada
-      const entregadosPorFarmacia = new Set(
-        seguimientos.filter(s => s.estado === 'Entregado' && s.user_id && s.user_id !== userId).map(s => s.pedido_id)
+      const entregadosPorEnfermeria = new Set(
+        seguimientos.filter(s => s.estado === 'Entregado' && s.user_id && s.user_id == userId).map(s => s.pedido_id)
       );
   
       const ultimaFechaPorPedido = {};
@@ -101,37 +101,33 @@ function PedidosEnfermeria() {
   
       const paraAdministrar = [];
       const anteriores = [];
-      const paraConfirmarEntrega = []; // Cambié el nombre de "faltaPorConfirmar" a "paraConfirmarEntrega"
+      const paraConfirmarEntrega = []; 
   
       pedidosConFecha.forEach(p => {
         const { pedido_id, estado } = p;
   
         if (estado === 'Entregado') {
-          if (entregadosPorFarmacia.has(pedido_id)) {
-            // Si Farmacia ya ha confirmado la entrega, se pasa a "Pedidos para Administrar"
+          if (entregadosPorEnfermeria.has(pedido_id)) {
             paraAdministrar.push(p);
           } else {
-            // Si Farmacia no ha confirmado la entrega, se pasa a "Pedidos para confirmar entrega"
             paraConfirmarEntrega.push(p);
           }
         } else if (estado === 'Administrado' && entregadosPorFarmacia.has(pedido_id)) {
           anteriores.push(p);
         } else if (estado === 'Entregado' && !entregadosPorFarmacia.has(pedido_id)) {
-          // Este caso se mantiene para "Pedidos para entregar" (o "Pedidos para confirmar entrega")
           paraConfirmarEntrega.push(p);
         }
       });
   
       setPedidosParaAdministrar(paraAdministrar);
       setPedidosAnteriores(anteriores);
-      setPedidosParaEntregar(paraConfirmarEntrega); // Aquí asignamos los pedidos que faltan por confirmar entrega
+      setPedidosParaEntregar(paraConfirmarEntrega); 
     };
   
     if (userId) {
       fetchDatos();
     }
   }, [controlSeleccionado, userId]);
-  
 
   const avanzarEstado = async (pedidoId, nuevoEstado) => {
     const { error: insertError } = await supabase.from('seguimiento_pedido').insert([{
@@ -155,7 +151,8 @@ function PedidosEnfermeria() {
       console.error('Error al actualizar estado del pedido:', updateError);
     }
 
-    window.location.reload();
+    setPedidosParaEntregar(prevState => prevState.filter(p => p.pedido_id !== pedidoId));
+    setPedidosParaAdministrar(prevState => [...prevState, ...pedidosParaEntregar.filter(p => p.pedido_id === pedidoId)]);
   };
 
   return (

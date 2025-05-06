@@ -131,8 +131,6 @@ function PedidosCelador() {
   
     fetchPedidos();
   }, [userId, userRole]);
-  
-  
 
   const avanzarEstado = async (pedidoId, nuevoEstado, actualizarPedido = true) => {
     const { error: insertError } = await supabase.from('seguimiento_pedido').insert([{
@@ -158,7 +156,19 @@ function PedidosCelador() {
       }
     }
 
-    window.location.reload();
+    // Actualizar el estado local sin necesidad de recargar la página
+    setPedidosParaRecoger(prevState =>
+      prevState.filter(p => p.pedido_id !== pedidoId)
+    );
+    setPedidosParaEntregar(prevState =>
+      prevState.filter(p => p.pedido_id !== pedidoId)
+    );
+    setPedidosSinConfirmarEntrega(prevState =>
+      prevState.filter(p => p.pedido_id !== pedidoId)
+    );
+    setPedidosAnteriores(prevState =>
+      prevState.filter(p => p.pedido_id !== pedidoId)
+    );
   };
 
   if (userRole === null) return <div>Cargando...</div>;
