@@ -39,57 +39,59 @@ function PedidosEnfermeria() {
   }, [navigate]);
 
   useEffect(() => {
+    if (!userId) return;
+
     const fetchDatos = async () => {
       const { data: ubicaciones, error: errorUbicaciones } = await supabase
         .from('ubicacion')
         .select('control');
-  
+
       if (errorUbicaciones) {
         console.error('Error al obtener ubicaciones:', errorUbicaciones);
         return;
       }
-  
+
       const controles = [...new Set(ubicaciones.map(u => u.control).filter(Boolean))];
       setControlesUnicos(controles);
-  
+
       const { data: pedidoData, error: errorPedido } = await supabase
         .from('pedido')
         .select('pedido_id, estado, habitacion, medicamento, ubicacion(control)');
-  
+
       if (errorPedido) {
         console.error('Error al obtener pedidos:', errorPedido);
         return;
       }
-  
+
       const pedidosFiltrados = controlSeleccionado
         ? pedidoData.filter(p => p.ubicacion?.control === controlSeleccionado)
         : pedidoData;
-  
+
       const idsPedidos = pedidosFiltrados.map(p => p.pedido_id);
-  
+
       const { data: seguimientos, error: errorSeguimiento } = await supabase
         .from('seguimiento_pedido')
         .select('pedido_id, estado, fecha, user_id')
         .in('pedido_id', idsPedidos)
         .order('fecha', { ascending: false });
-  
+
       if (errorSeguimiento) {
         console.error('Error al obtener seguimientos:', errorSeguimiento);
         return;
       }
-  
+
       // Filtrar los seguimientos de Farmacia para determinar si la entrega ha sido confirmada
       const entregadosPorEnfermeria = new Set(
         seguimientos.filter(s => s.estado === 'Entregado' && s.user_id && s.user_id == userId).map(s => s.pedido_id)
       );
-  
+
       const ultimaFechaPorPedido = {};
       seguimientos.forEach(s => {
         if (!ultimaFechaPorPedido[s.pedido_id]) {
           ultimaFechaPorPedido[s.pedido_id] = s.fecha;
         }
       });
-  
+
       // Añadimos la fecha de seguimiento a los pedidos
       const pedidosConFecha = pedidosFiltrados.map(p => {
         const fechaUltimoCambio = ultimaFechaPorPedido[p.pedido_id] || null;
@@ -98,35 +100,33 @@ function PedidosEnfermeria() {
           fechaUltimoCambio: fechaUltimoCambio,
         };
       });
-  
+
       const paraAdministrar = [];
       const anteriores = [];
-      const paraConfirmarEntrega = []; 
-  
+      const paraConfirmarEntrega = [];
+
       pedidosConFecha.forEach(p => {
         const { pedido_id, estado } = p;
-  
+
         if (estado === 'Entregado') {
           if (entregadosPorEnfermeria.has(pedido_id)) {
             paraAdministrar.push(p);
           } else {
             paraConfirmarEntrega.push(p);
           }
-        } else if (estado === 'Administrado' && entregadosPorFarmacia.has(pedido_id)) {
+        } else if (estado === 'Administrado') {
           anteriores.push(p);
-        } else if (estado === 'Entregado' && !entregadosPorFarmacia.has(pedido_id)) {
+        } else if (estado === 'Entregado' && !entregadosPorEnfermeria.has(pedido_id)) {
           paraConfirmarEntrega.push(p);
         }
       });
-  
+
       setPedidosParaAdministrar(paraAdministrar);
       setPedidosAnteriores(anteriores);
-      setPedidosParaEntregar(paraConfirmarEntrega); 
+      setPedidosParaEntregar(paraConfirmarEntrega);
     };
-  
-    if (userId) {
-      fetchDatos();
-    }
+
+    fetchDatos();
   }, [controlSeleccionado, userId]);
 
   const avanzarEstado = async (pedidoId, nuevoEstado) => {
@@ -208,6 +208,7 @@ function PedidosEnfermeria() {
         avanzarEstado={avanzarEstado}
         mostrarFecha={true}
       />
+
       <button
         onClick={async () => {
           await supabase.auth.signOut();

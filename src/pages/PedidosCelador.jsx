@@ -47,27 +47,27 @@ function PedidosCelador() {
 
   useEffect(() => {
     if (!userId || userRole !== 'celador') return;
-  
+
     const fetchPedidos = async () => {
       const { data: pedidos, error: errorPedidos } = await supabase
         .from('pedido')
         .select('pedido_id, estado, habitacion, medicamento');
-  
+
       if (errorPedidos) {
         console.error('Error al obtener pedidos:', errorPedidos);
         return;
       }
-  
+
       const { data: seguimientos, error: errorSeguimientos } = await supabase
         .from('seguimiento_pedido')
         .select('pedido_id, estado, user_id, fecha')
         .order('fecha', { ascending: false });
-  
+
       if (errorSeguimientos) {
         console.error('Error al obtener seguimientos:', errorSeguimientos);
         return;
       }
-  
+
       // Unir los pedidos con la fecha del último seguimiento
       const pedidosConFecha = pedidos.map(pedido => {
         const ultimoSeguimiento = seguimientos.find(seguimiento => seguimiento.pedido_id === pedido.pedido_id);
@@ -76,59 +76,59 @@ function PedidosCelador() {
           fechaUltimoCambio: ultimoSeguimiento ? ultimoSeguimiento.fecha : null,
         };
       });
-  
+
       // Filtrar "Pedidos para recoger" (estado 'Listo para recoger')
       const pedidosParaRecoger = pedidosConFecha.filter(p => p.estado === 'Listo para recoger');
-  
+
       // Filtrar "Pedidos para entregar" solo para el celador que ha hecho la recogida
       const pedidosParaEntregar = pedidosConFecha.filter(p => {
         if (p.estado !== 'Recogido') return false;
-  
+
         // Verificar si el celador actual es el que hizo la recogida
-        const recogidoPorEsteCelador = seguimientos.some(s => 
+        const recogidoPorEsteCelador = seguimientos.some(s =>
           s.pedido_id === p.pedido_id && s.estado === 'Recogido' && s.user_id === userId
         );
-  
+
         return recogidoPorEsteCelador;
       });
-  
+
       // Filtrar "Pedidos sin confirmar entrega" (estado 'Entregado', pero no confirmado por otro)
       const pedidosSinConfirmarEntrega = pedidosConFecha.filter(p => {
         if (p.estado !== 'Entregado') return false;
-  
+
         const entregaCelador = seguimientos.find(s =>
           s.pedido_id === p.pedido_id && s.estado === 'Entregado' && s.user_id === userId
         );
-  
+
         const confirmacionEnfermeria = seguimientos.some(s =>
           s.pedido_id === p.pedido_id && s.estado === 'Entregado' && s.user_id !== userId
         );
-  
+
         return entregaCelador && !confirmacionEnfermeria;
       });
-  
+
       // Filtrar "Pedidos anteriores" (estado 'Entregado' o 'Administrado', confirmado por enfermería)
       const pedidosAnteriores = pedidosConFecha.filter(p => {
         if (p.estado !== 'Entregado' && p.estado !== 'Administrado') return false;
-  
+
         const entregaCelador = seguimientos.find(s =>
           s.pedido_id === p.pedido_id && (s.estado === 'Entregado' || s.estado === 'Administrado') && s.user_id === userId
         );
-  
+
         const confirmacionEnfermeria = seguimientos.some(s =>
           s.pedido_id === p.pedido_id && (s.estado === 'Confirmado' || s.estado === 'Entregado') && s.user_id !== userId
         );
-  
+
         return entregaCelador && confirmacionEnfermeria;
       });
-  
+
       // Establecer los estados de los pedidos
       setPedidosParaRecoger(pedidosParaRecoger);
       setPedidosParaEntregar(pedidosParaEntregar); // Solo los pedidos que el celador ha recogido
       setPedidosSinConfirmarEntrega(pedidosSinConfirmarEntrega);
       setPedidosAnteriores(pedidosAnteriores);
     };
-  
+
     fetchPedidos();
   }, [userId, userRole]);
 
