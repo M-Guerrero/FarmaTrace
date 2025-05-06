@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import Carrusel from '../components/CarruselPedidos.jsx';
 
@@ -49,61 +49,56 @@ function PedidosFarmacia() {
 
   useEffect(() => {
     if (!userId || userRole !== 'farmacia') return;
-  
+
     const fetchPedidos = async () => {
       const { data: pedidoData, error: errorPedido } = await supabase
         .from('pedido')
         .select('pedido_id, estado, habitacion, medicamento');
-    
+
       if (errorPedido) {
         console.error('Error en pedido:', errorPedido);
         return;
       }
-    
+
       const idsPedidos = pedidoData.map(p => p.pedido_id);
-    
+
       const { data: seguimientos, error: errorSeguimiento } = await supabase
         .from('seguimiento_pedido')
         .select('pedido_id, estado, fecha, user_id')
         .in('pedido_id', idsPedidos)
         .order('fecha', { ascending: false });
-    
+
       if (errorSeguimiento) {
         console.error('Error en seguimientos:', errorSeguimiento);
         return;
       }
-    
+
       const { data: farmaciaUsuarios, error: errorUsuarios } = await supabase
         .from('usuario')
         .select('user_id')
         .eq('rol', 'farmacia');
-    
+
       if (errorUsuarios) {
         console.error('Error al obtener los usuarios de farmacia:', errorUsuarios);
         return;
       }
-    
+
       const idsFarmacia = new Set(farmaciaUsuarios.map(u => u.user_id));
-    
+
       const enProceso = [];
       const listos = [];
       const esperandoConfirmacion = [];
       const anteriores = [];
-    
+
       pedidoData.forEach(p => {
         const { pedido_id, estado } = p;
-    
         const seguimientoPedido = seguimientos.filter(s => s.pedido_id === pedido_id);
         const confirmadoPorFarmacia = seguimientoPedido.some(
           s => s.estado === 'Recogido' && idsFarmacia.has(s.user_id)
         );
-    
-        // Obtener la fecha del último seguimiento (el array ya está ordenado por fecha desc)
         const fechaUltimoCambio = seguimientoPedido.length > 0 ? seguimientoPedido[0].fecha : null;
-    
-        // Añadirla al objeto de pedido
         const pedidoConFecha = { ...p, fechaUltimoCambio };
-    
+
         if (estado === 'En proceso') {
           enProceso.push(pedidoConFecha);
         } else if (estado === 'Listo para recoger') {
@@ -116,13 +111,13 @@ function PedidosFarmacia() {
           }
         }
       });
-    
+
       setPedidosEnProceso(enProceso);
       setPedidosListos(listos);
       setPedidosEsperandoConfirmacion(esperandoConfirmacion);
       setPedidosAnteriores(anteriores);
-    };    
-  
+    };
+
     fetchPedidos();
   }, [userId, userRole]);
 
@@ -164,7 +159,7 @@ function PedidosFarmacia() {
   };
 
   if (userRole === null) {
-    return <div>Cargando...</div>; // O puedes usar un loader bonito
+    return <div>Cargando...</div>;
   }
 
   return (
@@ -174,7 +169,7 @@ function PedidosFarmacia() {
       </h1>
 
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-        <a href="/crear-pedido" style={{
+        <Link to="/crear-pedido" style={{
           backgroundColor: '#52B2BF',
           color: 'white',
           padding: '0.5rem 1rem',
@@ -187,13 +182,40 @@ function PedidosFarmacia() {
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#52B2BF'}
         >
           Crear Pedido
-        </a>
+        </Link>
       </div>
 
-      <Carrusel titulo="Pedidos en preparación" pedidos={pedidosEnProceso} botonTexto="Marcar como Listo para Recoger" siguienteEstado="Listo para recoger" avanzarEstado={avanzarEstado} mostrarFecha={true}/>
-      <Carrusel titulo="Pedidos Listos para Recoger" pedidos={pedidosListos} mostrarFecha={true}/>
-      <Carrusel titulo="Esperando Confirmación de Recogida" pedidos={pedidosEsperandoConfirmacion} botonTexto="Confirmar Recogida" siguienteEstado="Recogido" avanzarEstado={(pedidoId, estado) => avanzarEstado(pedidoId, estado, false)} mostrarFecha={true}/>
-      <Carrusel titulo="Pedidos Anteriores" pedidos={pedidosAnteriores} avanzarEstado={avanzarEstado} mostrarFecha={true}/>
+      <Carrusel
+        titulo="Pedidos en preparación"
+        pedidos={pedidosEnProceso}
+        botonTexto="Marcar como Listo para Recoger"
+        siguienteEstado="Listo para recoger"
+        avanzarEstado={avanzarEstado}
+        mostrarFecha={true}
+      />
+
+      <Carrusel
+        titulo="Pedidos Listos para Recoger"
+        pedidos={pedidosListos}
+        mostrarFecha={true}
+      />
+
+      <Carrusel
+        titulo="Esperando Confirmación de Recogida"
+        pedidos={pedidosEsperandoConfirmacion}
+        botonTexto="Confirmar Recogida"
+        siguienteEstado="Recogido"
+        avanzarEstado={(pedidoId, estado) => avanzarEstado(pedidoId, estado, false)}
+        mostrarFecha={true}
+      />
+
+      <Carrusel
+        titulo="Pedidos Anteriores"
+        pedidos={pedidosAnteriores}
+        avanzarEstado={avanzarEstado}
+        mostrarFecha={true}
+      />
+
       <button
         onClick={async () => {
           await supabase.auth.signOut();
