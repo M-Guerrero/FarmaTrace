@@ -68,7 +68,7 @@ Los estados *Recogido* y *Entregado* los pueden confirmar dos roles distintos. E
 
 | Crear pedido (Farmacia) | Pedidos de Farmacia | Pedidos del Celador |
 |:---:|:---:|:---:|
-| <img src="docs/img/crear-pedido.png" width="230"> | <img src="docs/img/pedidos-farmacia.png" width="260"> | <img src="docs/img/pedidos-celador.png" width="260"> |
+| <img src="docs/img/crear-pedido.png" width="260"> | <img src="docs/img/pedidos-farmacia.png" width="260"> | <img src="docs/img/pedidos-celador.png" width="260"> |
 
 <p align="center"><strong>Pedidos de Enfermería</strong> (con filtro por control de enfermería)</p>
 <p align="center">
